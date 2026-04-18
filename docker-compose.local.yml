@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  llm-gateway:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: llm-gateway
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - ARIZE_SPACE_KEY=${ARIZE_SPACE_KEY:-""}
+      - ARIZE_API_KEY=${ARIZE_API_KEY:-""}
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - nasiko-net
+
+  # Demo agent service (optional, for containerized demo)
+  demo-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: demo-agent
+    depends_on:
+      llm-gateway:
+        condition: service_healthy
+    environment:
+      - LLM_BASE_URL=http://llm-gateway:4000
+      - LLM_API_KEY=virtual-master-key
+      - LLM_MODEL=${LLM_MODEL:-gpt-4}
+    networks:
+      - nasiko-net
+    profiles:
+      - agent  # only starts with: docker-compose --profile agent up
+
+networks:
+  nasiko-net:
+    driver: bridge
